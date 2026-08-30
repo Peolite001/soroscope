@@ -195,9 +195,13 @@ mod tests {
             ScVal::Symbol(ScSymbol(string_m))
         };
 
-        let topics: VecM<ScVal> = vec![sym(topic0), sym("CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"), sym(fn_name)]
-            .try_into()
-            .unwrap();
+        let topics: VecM<ScVal> = vec![
+            sym(topic0),
+            sym("CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"),
+            sym(fn_name),
+        ]
+        .try_into()
+        .unwrap();
 
         let event = DiagnosticEvent {
             in_successful_contract_call: true,

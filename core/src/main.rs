@@ -1,6 +1,4 @@
-
 #![allow(dead_code)]
-
 mod auth;
 mod benchmarks;
 mod cache;
@@ -11,8 +9,8 @@ pub mod fee_analytics;
 pub mod fee_collector;
 pub mod fee_store;
 mod gas_golfing;
-mod grpc;
 mod graphql;
+mod grpc;
 pub mod insights;
 mod jobs;
 mod leader_lock;
@@ -27,13 +25,10 @@ mod simulation_service;
 mod task_queue;
 mod trace_propagation;
 mod wasm_branch_analysis;
-mod worker_pool;
-mod webhooks;
 mod webhook_validation;
+mod webhooks;
+mod worker_pool;
 mod ws;
-
-use crate::webhook_validation::ValidatedWebhook;
-
 use crate::cache::{ContractCache, SimulationCache};
 use crate::comparison::{CompareMode, RegressionFlag, RegressionReport, ResourceDelta};
 use crate::errors::AppError;
@@ -46,8 +41,9 @@ use crate::jobs::{JobQueue, JobQueueConfig, JobWorker};
 use crate::merkle_tree::MerkleTree;
 use crate::rpc_provider::{ProviderRegistry, RegistryConfig, RegistrySnapshot, RpcProvider};
 use crate::simulation::{SimulationEngine, SimulationMode, SimulationResult};
-use crate::ws::SimulationBus;
+use crate::webhook_validation::ValidatedWebhook;
 use crate::worker_pool::EventWorkerPool;
+use crate::ws::SimulationBus;
 use axum::{
     extract::{Json, Multipart, State},
     http::{HeaderMap, HeaderName, HeaderValue, StatusCode},
@@ -81,7 +77,6 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use utoipa::{OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
-
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 struct AppConfig {
@@ -186,55 +181,42 @@ struct AppConfig {
     #[serde(default = "default_allowed_origins")]
     allowed_origins: String,
 }
-
 fn default_health_check_interval() -> u64 {
     30
 }
-
 fn default_simulation_timeout_secs() -> u64 {
     30
 }
-
 fn default_simulation_mode() -> String {
     "failover".to_string()
 }
-
 fn default_gossip_interval_secs() -> u64 {
     30
 }
-
 fn default_database_url() -> String {
     "sqlite://soroscope.db".to_string()
 }
-
 fn default_inbound_webhook_secret() -> String {
     String::new()
 }
-
 fn default_job_timeout_secs() -> u64 {
     300
 }
-
 fn default_max_concurrent_jobs() -> usize {
     10
 }
-
 fn default_event_worker_threads() -> usize {
     4
 }
-
 fn default_fee_collection_interval() -> u64 {
     5
 }
-
 fn default_fee_retention_days() -> u32 {
     30
 }
-
 fn default_fee_analysis_enabled() -> bool {
     true
 }
-
 fn default_emergency_verification_paused() -> bool {
     false
 }
@@ -244,23 +226,20 @@ fn default_disk_cache_path() -> String {
     // in the CWD by default.
     String::new()
 }
-
 fn default_max_ledger_age() -> u32 {
     100
 }
-
 fn default_event_bus_capacity() -> usize {
     256
+}
 fn default_allowed_origins() -> String {
     // Empty string means: fall back to allow-all (*).
     // Operators set ALLOWED_ORIGINS=http://localhost:3000,https://app.example.com
     // in their environment to restrict access.
     String::new()
 }
-
 fn load_config() -> Result<AppConfig, ConfigError> {
     dotenvy::dotenv().ok();
-
     let settings = Config::builder()
         .add_source(config::Environment::default())
         .set_default("server_port", 8080)?
@@ -292,10 +271,8 @@ fn load_config() -> Result<AppConfig, ConfigError> {
         .set_default("log_format_json", false)?
         .set_default("allowed_origins", "")?
         .build()?;
-
     settings.try_deserialize()
 }
-
 /// Build the tracing `EnvFilter` from the configured log directive
 /// (`RUST_LOG`, defaulting to `"info"` — see [`AppConfig::rust_log`]).
 ///
@@ -310,32 +287,26 @@ fn build_env_filter(directive: &str) -> EnvFilter {
     } else {
         directive
     };
-
     EnvFilter::try_new(directive).unwrap_or_else(|error| {
         eprintln!("Invalid RUST_LOG directive '{directive}': {error}. Falling back to 'info'.");
         EnvFilter::new("info")
     })
 }
-
 #[cfg(test)]
 mod log_filter_tests {
     use super::build_env_filter;
-
     #[test]
     fn empty_directive_falls_back_to_info() {
         assert_eq!(build_env_filter("").to_string(), "info");
     }
-
     #[test]
     fn blank_directive_falls_back_to_info() {
         assert_eq!(build_env_filter("   ").to_string(), "info");
     }
-
     #[test]
     fn valid_directive_is_used_verbatim() {
         assert_eq!(build_env_filter("debug").to_string(), "debug");
     }
-
     #[test]
     fn per_module_directives_are_supported() {
         let filter = build_env_filter("soroscope_core=debug,tower_http=warn");
@@ -343,7 +314,6 @@ mod log_filter_tests {
         assert!(rendered.contains("soroscope_core=debug"));
         assert!(rendered.contains("tower_http=warn"));
     }
-
     #[test]
     fn invalid_directive_falls_back_to_info_instead_of_panicking() {
         assert_eq!(
@@ -352,7 +322,6 @@ mod log_filter_tests {
         );
     }
 }
-
 /// Parse the `RPC_PROVIDERS` env var (JSON array) or fall back to wrapping the
 /// single `SOROBAN_RPC_URL` into a one-element provider list.
 fn build_providers(config: &AppConfig) -> Vec<RpcProvider> {
@@ -376,7 +345,6 @@ fn build_providers(config: &AppConfig) -> Vec<RpcProvider> {
             }
         }
     }
-
     vec![RpcProvider {
         name: "default".to_string(),
         url: config.soroban_rpc_url.clone(),
@@ -385,31 +353,26 @@ fn build_providers(config: &AppConfig) -> Vec<RpcProvider> {
         advertise: None,
     }]
 }
-
 fn parse_seed_peers(raw: &str) -> Vec<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Vec::new();
     }
-
     if trimmed.starts_with('[') {
         return serde_json::from_str::<Vec<String>>(trimmed).unwrap_or_default();
     }
-
     trimmed
         .split(',')
         .map(|peer| peer.trim().trim_end_matches('/').to_string())
         .filter(|peer| !peer.is_empty())
         .collect()
 }
-
 fn build_registry_config(config: &AppConfig) -> RegistryConfig {
     let instance_id = if config.registry_instance_id.trim().is_empty() {
         uuid::Uuid::new_v4().to_string()
     } else {
         config.registry_instance_id.trim().to_string()
     };
-
     let public_base_url = if config.registry_public_url.trim().is_empty() {
         Some(format!("http://127.0.0.1:{}", config.server_port))
     } else {
@@ -421,14 +384,12 @@ fn build_registry_config(config: &AppConfig) -> RegistryConfig {
                 .to_string(),
         )
     };
-
     RegistryConfig {
         instance_id,
         public_base_url,
         seed_peers: parse_seed_peers(&config.registry_seed_peers),
     }
 }
-
 /// Shared application state injected into every Axum handler via [`State`].
 pub struct AppState {
     engine: SimulationEngine,
@@ -452,7 +413,6 @@ pub struct AppState {
     /// WebSocket event bus for simulation jobs.
     simulation_bus: Arc<SimulationBus>,
 }
-
 #[derive(Clone)]
 pub(crate) struct AppMetrics {
     registry: Registry,
@@ -478,11 +438,9 @@ pub(crate) struct AppMetrics {
     /// Depth of background job queues, by queue name.
     job_queue_depth: prometheus::GaugeVec,
 }
-
 impl AppMetrics {
     fn new() -> Result<Self, prometheus::Error> {
         let registry = Registry::new();
-
         let simulation_latency_seconds = HistogramVec::new(
             prometheus::HistogramOpts::new(
                 "simulation_latency_seconds",
@@ -519,28 +477,44 @@ impl AppMetrics {
             &["host"],
         )?;
         let host_memory_usage_percent = prometheus::GaugeVec::new(
+            Opts::new(
                 "host_memory_usage_percent",
                 "Host-wide memory usage percentage (0-100) sampled by the system alarm monitor",
+            ),
+            &["server_id"],
+        )?;
         let process_memory_bytes = prometheus::GaugeVec::new(
+            Opts::new(
                 "process_memory_bytes",
                 "Resident memory size of the SoroScope process in bytes",
+            ),
             &["process"],
+        )?;
         let indexing_latency_seconds = HistogramVec::new(
             prometheus::HistogramOpts::new(
                 "indexing_latency_seconds",
                 "Latency of ledger indexing/collection cycles in seconds",
+            ),
             &["stage"],
+        )?;
         let events_processed_total = IntCounterVec::new(
+            Opts::new(
                 "events_processed_total",
                 "Total number of ledger events successfully processed",
+            ),
+            &["type"],
+        )?;
         let indexing_errors_total = IntCounterVec::new(
+            Opts::new(
                 "indexing_errors_total",
                 "Total number of indexing cycle failures",
+            ),
+            &["type"],
+        )?;
         let job_queue_depth = prometheus::GaugeVec::new(
             Opts::new("job_queue_depth", "Current depth of background job queues"),
             &["queue"],
         )?;
-
         registry.register(Box::new(simulation_latency_seconds.clone()))?;
         registry.register(Box::new(rpc_error_count_total.clone()))?;
         registry.register(Box::new(simulation_requests_total.clone()))?;
@@ -552,7 +526,6 @@ impl AppMetrics {
         registry.register(Box::new(events_processed_total.clone()))?;
         registry.register(Box::new(indexing_errors_total.clone()))?;
         registry.register(Box::new(job_queue_depth.clone()))?;
-
         Ok(Self {
             registry,
             simulation_latency_seconds,
@@ -569,7 +542,6 @@ impl AppMetrics {
         })
     }
 }
-
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct AnalyzeRequest {
     #[schema(example = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC")]
@@ -589,7 +561,6 @@ pub struct AnalyzeRequest {
     #[schema(example = false)]
     pub include_merkle_tree: Option<bool>,
 }
-
 #[derive(Serialize, ToSchema)]
 pub struct ResourceReport {
     /// CPU instructions consumed
@@ -628,7 +599,6 @@ pub struct ResourceReport {
     /// Testnet average resource usage for comparison
     pub testnet_averages: TestnetAverages,
 }
-
 #[derive(Serialize, ToSchema)]
 pub struct TestnetAverages {
     /// Average CPU instructions for typical Soroban transactions
@@ -642,21 +612,18 @@ pub struct TestnetAverages {
     /// Merkle tree root hash (hex-encoded) of the state snapshot, if requested
     pub merkle_tree_root: Option<String>,
 }
-
 #[derive(Serialize, ToSchema)]
 pub struct TtlAnalysisApiReport {
     pub current_ledger: u64,
     pub touched_entries: Vec<TtlEntryApiReport>,
     pub extend_ttl_suggestions: Vec<ExtendTtlSuggestionApi>,
 }
-
 #[derive(Serialize, ToSchema)]
 pub struct TtlEntryApiReport {
     pub key: String,
     pub live_until_ledger: u32,
     pub remaining_ledgers: i64,
 }
-
 #[derive(Serialize, ToSchema)]
 pub struct ExtendTtlSuggestionApi {
     pub key: String,
@@ -666,7 +633,6 @@ pub struct ExtendTtlSuggestionApi {
     pub ledgers_to_extend_by: u32,
     pub suggested_operation: String,
 }
-
 /// "Nutrition label" for the contract invocation.
 #[derive(Serialize, ToSchema)]
 pub struct NutritionReport {
@@ -675,7 +641,6 @@ pub struct NutritionReport {
     /// Actionable optimisation insights.
     pub insights: Vec<InsightEntry>,
 }
-
 /// A single optimisation insight.
 #[derive(Serialize, ToSchema)]
 pub struct InsightEntry {
@@ -684,13 +649,11 @@ pub struct InsightEntry {
     pub message: String,
     pub suggested_fix: String,
 }
-
 #[derive(Serialize, ToSchema, Debug)]
 pub struct StateDependencyReport {
     pub key: String,
     pub source: String,
 }
-
 #[derive(Deserialize, ToSchema)]
 pub struct OptimizeLimitsRequest {
     #[schema(example = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC")]
@@ -704,11 +667,9 @@ pub struct OptimizeLimitsRequest {
     #[serde(default = "default_safety_margin")]
     pub safety_margin: f64,
 }
-
 fn default_safety_margin() -> f64 {
     0.05
 }
-
 #[derive(Serialize, ToSchema)]
 pub struct OptimizeLimitsResponse {
     pub cpu: crate::simulation::OptimizationBuffer,
@@ -717,9 +678,7 @@ pub struct OptimizeLimitsResponse {
     pub ledger_write: crate::simulation::OptimizationBuffer,
     pub recommended: crate::simulation::SorobanResources,
 }
-
 // ── Fee Market Types ─────────────────────────────────────────────────────
-
 /// Request body for fee recommendation endpoint
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct FeeRecommendationRequest {
@@ -730,7 +689,6 @@ pub struct FeeRecommendationRequest {
     #[schema(example = 0.10)]
     pub safety_margin: Option<f64>,
 }
-
 /// Response with fee recommendations
 #[derive(Debug, Serialize, ToSchema)]
 pub struct FeeRecommendationResponse {
@@ -751,7 +709,6 @@ pub struct FeeRecommendationResponse {
     /// Timestamp of prediction
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
-
 /// Request for historical fee data
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct FeeHistoryRequest {
@@ -765,7 +722,6 @@ pub struct FeeHistoryRequest {
     #[schema(example = 1100)]
     pub to_ledger: Option<i64>,
 }
-
 /// Historical fee data response
 #[derive(Debug, Serialize, ToSchema)]
 pub struct FeeHistoryResponse {
@@ -774,7 +730,6 @@ pub struct FeeHistoryResponse {
     /// Total count of samples
     pub total_count: i64,
 }
-
 /// Request body for the WASM-bytes analysis endpoint.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct AnalyzeWasmRequest {
@@ -792,7 +747,6 @@ pub struct AnalyzeWasmRequest {
     /// Whether to enable experimental host functions
     pub enable_experimental: Option<bool>,
 }
-
 /// Request body for the WASM profiling endpoint.
 #[derive(Debug, Deserialize)]
 pub struct ProfileWasmRequest {
@@ -804,7 +758,6 @@ pub struct ProfileWasmRequest {
     #[serde(default)]
     pub args: Vec<String>,
 }
-
 /// Response body for the WASM profiling endpoint.
 #[derive(Debug, Serialize)]
 pub struct ProfileResponse {
@@ -813,7 +766,6 @@ pub struct ProfileResponse {
     /// Standard Soroban resource metrics (CPU, RAM, etc.).
     pub resources: simulation::SorobanResources,
 }
-
 /// Request body for the WASM execution-branch analysis endpoint (Issue #101).
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct AnalyzeWasmBranchesRequest {
@@ -828,7 +780,6 @@ pub struct AnalyzeWasmBranchesRequest {
     #[schema(example = "[]")]
     pub args: Option<Vec<String>>,
 }
-
 /// API response for the WASM execution-branch analysis endpoint.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct WasmBranchAnalysisResponse {
@@ -857,7 +808,6 @@ pub struct WasmBranchAnalysisResponse {
     /// Human-readable note about path coverage.
     pub coverage_note: String,
 }
-
 /// Convert a `SimulationResult` (library type) into the API `ResourceReport`.
 fn to_report(
     result: &SimulationResult,
@@ -865,7 +815,6 @@ fn to_report(
     merkle_tree_root: Option<String>,
 ) -> ResourceReport {
     let insights_report = insights_engine.analyze(&result.resources);
-
     ResourceReport {
         cpu_instructions: result.resources.cpu_instructions,
         ram_bytes: result.resources.ram_bytes,
@@ -935,7 +884,6 @@ fn to_report(
         },
     }
 }
-
 #[utoipa::path(
     post,
     path = "/analyze",
@@ -961,23 +909,18 @@ async fn analyze(
         function_name = %payload.function_name,
     );
     let _enter = span.enter();
-
     tracing::info!("Received analyze request");
-
     let args = payload.args.clone().unwrap_or_default();
     let cache_key =
         SimulationCache::generate_key(&payload.contract_id, &payload.function_name, &args);
-
     // Track simulation latency
     let start_time = std::time::Instant::now();
-
     let (result, cache_status): (SimulationResult, &'static str) =
         if let Some(cached) = state.cache.get(&cache_key).await {
             tracing::debug!("Cache HIT for key: {}", cache_key);
             (cached, "HIT")
         } else {
             tracing::debug!("Cache MISS for key: {}", cache_key);
-
             // Wrap the simulation call with a timeout to prevent hanging
             let sim_result = tokio::time::timeout(
                 state.simulation_timeout,
@@ -1003,7 +946,6 @@ async fn analyze(
                     state.simulation_timeout.as_secs()
                 ))
             })?;
-
             let sim: SimulationResult = match sim_result {
                 Ok(sim) => sim,
                 Err(err) => {
@@ -1018,7 +960,6 @@ async fn analyze(
             state.cache.set(cache_key, sim.clone()).await;
             (sim, "MISS")
         };
-
     let latency_ms = start_time.elapsed().as_millis() as u64;
     state
         .metrics
@@ -1030,7 +971,6 @@ async fn analyze(
         .simulation_requests_total
         .with_label_values(&["/analyze", cache_status])
         .inc();
-
     // Log comprehensive simulation metrics
     tracing::info!(
         latency_ms = latency_ms,
@@ -1044,7 +984,6 @@ async fn analyze(
         latest_ledger = result.latest_ledger,
         "Simulation completed successfully"
     );
-
     state.cache.log_stats();
     let insights_report = state.insights_engine.analyze(&result.resources);
     state
@@ -1052,7 +991,6 @@ async fn analyze(
         .resource_utilization_percent
         .with_label_values(&["efficiency_score"])
         .set(insights_report.efficiency_score as f64);
-
     // Generate Merkle tree root if requested
     let merkle_tree_root = if payload.include_merkle_tree.unwrap_or(false) {
         result.state_snapshot.as_ref().and_then(|snapshot| {
@@ -1062,7 +1000,6 @@ async fn analyze(
                 .values()
                 .filter_map(|entry_b64| hex::decode(entry_b64).ok())
                 .collect();
-
             if leaves.is_empty() {
                 tracing::warn!("No ledger entries available for Merkle tree generation");
                 None
@@ -1081,7 +1018,6 @@ async fn analyze(
     } else {
         None
     };
-
     let mut headers = HeaderMap::new();
     headers.insert(
         HeaderName::from_static("x-soroscope-cache"),
@@ -1092,13 +1028,11 @@ async fn analyze(
         HeaderValue::from_str(&latency_ms.to_string())
             .unwrap_or_else(|_| HeaderValue::from_static("0")),
     );
-
     Ok((
         headers,
         Json(to_report(&result, &state.insights_engine, merkle_tree_root)),
     ))
 }
-
 #[utoipa::path(
     post,
     path = "/analyze/wasm",
@@ -1119,16 +1053,13 @@ async fn analyze_wasm(
     Json(payload): Json<AnalyzeWasmRequest>,
 ) -> Result<Json<ResourceReport>, AppError> {
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-
     tracing::info!(
         function_name = %payload.function_name,
         "Received WASM analyze request"
     );
-
     let wasm_bytes = BASE64
         .decode(&payload.wasm_bytes)
         .map_err(|e| AppError::BadRequest(format!("Invalid base64 WASM data: {}", e)))?;
-
     // ── Validate WASM size: reject files larger than 2 MB ────────────────────
     const MAX_WASM_SIZE: usize = 2 * 1024 * 1024; // 2 MB
     if wasm_bytes.len() > MAX_WASM_SIZE {
@@ -1138,7 +1069,6 @@ async fn analyze_wasm(
             MAX_WASM_SIZE,
         )));
     }
-
     // ── Validate WASM magic bytes: must start with \0asm (0x00 0x61 0x73 0x6D) ──
     const WASM_MAGIC: [u8; 4] = [0x00, 0x61, 0x73, 0x6d];
     if wasm_bytes.len() < 8 || wasm_bytes[..4] != WASM_MAGIC {
@@ -1148,24 +1078,16 @@ async fn analyze_wasm(
                 .to_string(),
         ));
     }
-
     // ── Validate WASM binary version: must be version 1 (little-endian) ──────
-    let version = u32::from_le_bytes([
-        wasm_bytes[4],
-        wasm_bytes[5],
-        wasm_bytes[6],
-        wasm_bytes[7],
-    ]);
+    let version = u32::from_le_bytes([wasm_bytes[4], wasm_bytes[5], wasm_bytes[6], wasm_bytes[7]]);
     if version != 1 {
         return Err(AppError::BadRequest(format!(
             "Unsupported WASM version: {}. Expected version 1.",
             version
         )));
     }
-
     let function_name = payload.function_name.clone();
     let args = payload.args.clone().unwrap_or_default();
-
     let start_time = std::time::Instant::now();
     let resources = tokio::task::spawn_blocking(move || {
         simulation::profile_contract(
@@ -1203,7 +1125,6 @@ async fn analyze_wasm(
         .simulation_requests_total
         .with_label_values(&["/analyze/wasm", "LOCAL"])
         .inc();
-
     let sim_result = simulation::SimulationResult {
         resources,
         transaction_hash: None,
@@ -1216,17 +1137,14 @@ async fn analyze_wasm(
         state_snapshot: None,
         protocol_version: payload.protocol_version.unwrap_or(20),
     };
-
     let report = to_report(&sim_result, &state.insights_engine, None);
     state
         .metrics
         .resource_utilization_percent
         .with_label_values(&["efficiency_score"])
         .set(report.nutrition.efficiency_score as f64);
-
     Ok(Json(report))
 }
-
 async fn metrics_handler(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, AppError> {
@@ -1244,25 +1162,20 @@ async fn metrics_handler(
         output,
     ))
 }
-
 async fn analyze_wasm_profile(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<ProfileWasmRequest>,
 ) -> Result<Json<ProfileResponse>, AppError> {
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-
     tracing::info!(
         function_name = %payload.function_name,
         "Received WASM profile request"
     );
-
     let wasm_bytes = BASE64
         .decode(&payload.wasm_bytes)
         .map_err(|e| AppError::BadRequest(format!("Invalid base64 WASM data: {}", e)))?;
-
     let function_name = payload.function_name.clone();
     let args = payload.args.clone();
-
     let result = tokio::time::timeout(
         state.simulation_timeout,
         tokio::task::spawn_blocking(move || {
@@ -1278,14 +1191,10 @@ async fn analyze_wasm_profile(
     })?
     .map_err(|e| AppError::Internal(format!("Profiling task panicked: {}", e)))?
     .map_err(|e| AppError::BadRequest(format!("Profiling failed: {}", e)))?;
-
     let (resources, profile) = result;
-
     Ok(Json(ProfileResponse { profile, resources }))
 }
-
 // ── WASM branch analysis handler (Issue #101) ─────────────────────────────────
-
 #[utoipa::path(
     post,
     path = "/analyze/wasm/branches",
@@ -1307,24 +1216,19 @@ async fn analyze_wasm_branches(
 ) -> Result<Json<WasmBranchAnalysisResponse>, AppError> {
     use crate::wasm_branch_analysis::analyze_wasm_branches as run_analysis;
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-
     tracing::info!(
         function_name = %payload.function_name,
         "Received WASM branch analysis request"
     );
-
     let wasm_bytes = BASE64
         .decode(&payload.wasm_bytes)
         .map_err(|e| AppError::BadRequest(format!("Invalid base64 WASM data: {}", e)))?;
-
     let function_name = payload.function_name.clone();
     let args = payload.args.clone().unwrap_or_default();
-
     let report = tokio::task::spawn_blocking(move || run_analysis(wasm_bytes, function_name, args))
         .await
         .map_err(|e| AppError::Internal(format!("Branch analysis task panicked: {}", e)))?
         .map_err(|e| AppError::Internal(format!("Branch analysis failed: {}", e)))?;
-
     tracing::info!(
         function_name = %payload.function_name,
         total_branch_count = report.total_branch_count,
@@ -1334,7 +1238,6 @@ async fn analyze_wasm_branches(
         worst_ram = report.worst_case_resources.ram_bytes,
         "Branch analysis completed"
     );
-
     Ok(Json(WasmBranchAnalysisResponse {
         function_name: report.function_name,
         total_branch_count: report.total_branch_count,
@@ -1350,7 +1253,6 @@ async fn analyze_wasm_branches(
         coverage_note: report.coverage_note,
     }))
 }
-
 #[utoipa::path(
     post,
     path = "/analyze/optimize-limits",
@@ -1370,7 +1272,6 @@ async fn optimize_limits(
         payload.contract_id,
         payload.function_name
     );
-
     let report = state
         .engine
         .optimize_limits(
@@ -1381,7 +1282,6 @@ async fn optimize_limits(
         )
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
-
     Ok(Json(OptimizeLimitsResponse {
         cpu: report.cpu,
         ram: report.ram,
@@ -1390,16 +1290,12 @@ async fn optimize_limits(
         recommended: report.recommended,
     }))
 }
-
 // ── Compare types ────────────────────────────────────────────────────────────
-
 #[derive(Serialize, ToSchema)]
 pub struct CompareApiResponse {
     pub report: RegressionReport,
 }
-
 // ── Compare handler ──────────────────────────────────────────────────────────
-
 #[utoipa::path(
     post,
     path = "/analyze/compare",
@@ -1423,7 +1319,6 @@ async fn compare_handler(
     let mut contract_id: Option<String> = None;
     let mut function_name: Option<String> = None;
     let mut args: Vec<String> = Vec::new();
-
     while let Some(field) = multipart
         .next_field()
         .await
@@ -1483,19 +1378,15 @@ async fn compare_handler(
             _ => { /* ignore unknown fields */ }
         }
     }
-
     let mode = mode_str.unwrap_or_else(|| "local_vs_local".to_string());
-
     let compare_mode = match mode.as_str() {
         "local_vs_local" => {
             let current_bytes = current_wasm_bytes
                 .ok_or_else(|| AppError::BadRequest("Missing current_wasm file".to_string()))?;
             let base_bytes = base_wasm_bytes
                 .ok_or_else(|| AppError::BadRequest("Missing base_wasm file".to_string()))?;
-
             let current_tmp = write_temp_wasm(&current_bytes)?;
             let base_tmp = write_temp_wasm(&base_bytes)?;
-
             CompareMode::LocalVsLocal {
                 current_wasm: current_tmp,
                 base_wasm: base_tmp,
@@ -1508,9 +1399,7 @@ async fn compare_handler(
                 .ok_or_else(|| AppError::BadRequest("Missing contract_id".to_string()))?;
             let fname = function_name
                 .ok_or_else(|| AppError::BadRequest("Missing function_name".to_string()))?;
-
             let current_tmp = write_temp_wasm(&current_bytes)?;
-
             CompareMode::LocalVsDeployed {
                 current_wasm: current_tmp,
                 contract_id: cid,
@@ -1525,14 +1414,11 @@ async fn compare_handler(
             )));
         }
     };
-
     let report = comparison::run_comparison(&state.engine, compare_mode)
         .await
         .map_err(|e| AppError::Internal(format!("Comparison failed: {}", e)))?;
-
     Ok(Json(CompareApiResponse { report }))
 }
-
 /// Write WASM bytes to a temporary file and return the path.
 fn write_temp_wasm(bytes: &[u8]) -> Result<std::path::PathBuf, AppError> {
     use std::io::Write;
@@ -1547,9 +1433,7 @@ fn write_temp_wasm(bytes: &[u8]) -> Result<std::path::PathBuf, AppError> {
         .map_err(|e| AppError::Internal(format!("Failed to persist temp file: {}", e)))?;
     Ok(path)
 }
-
 // ── Gas Golfing Types ─────────────────────────────────────────────────────
-
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct GasGolfingRequest {
     /// Base64-encoded WASM bytecode
@@ -1559,14 +1443,11 @@ pub struct GasGolfingRequest {
     #[schema(example = "my_contract")]
     pub contract_name: String,
 }
-
 #[derive(Serialize, ToSchema)]
 pub struct GasGolfingResponse {
     pub report: GasGolfingReport,
 }
-
 // ── Gas Golfing Handler ───────────────────────────────────────────────────
-
 #[utoipa::path(
     post,
     path = "/analyze/gas-golfing",
@@ -1583,18 +1464,14 @@ async fn analyze_gas_golfing(
     Json(payload): Json<GasGolfingRequest>,
 ) -> Result<Json<GasGolfingResponse>, AppError> {
     use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-
     tracing::info!(
         contract_name = %payload.contract_name,
         "Received gas golfing analysis request"
     );
-
     let wasm_bytes = BASE64
         .decode(&payload.wasm_bytes)
         .map_err(|e| AppError::BadRequest(format!("Invalid base64 WASM data: {}", e)))?;
-
     let contract_name = payload.contract_name.clone();
-
     let report = tokio::task::spawn_blocking(move || {
         state
             .gas_golfing_analyzer
@@ -1602,12 +1479,9 @@ async fn analyze_gas_golfing(
     })
     .await
     .map_err(|e| AppError::Internal(format!("Gas golfing analysis task panicked: {}", e)))?;
-
     Ok(Json(GasGolfingResponse { report }))
 }
-
 // ── Fee Market API Handlers ──────────────────────────────────────────────
-
 #[utoipa::path(
     get,
     path = "/fees/recommend",
@@ -1625,30 +1499,25 @@ async fn fee_recommend(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<FeeRecommendationResponse>, AppError> {
     tracing::info!("Generating fee recommendation");
-
     // Get recent samples for analysis
     let samples = state
         .fee_store
         .get_recent_samples(100)
         .await
         .map_err(|e| AppError::Internal(format!("Failed to fetch fee data: {}", e)))?;
-
     // Get current ledger from latest sample or use 0
     let current_ledger = samples
         .first()
         .map(|s| s.ledger_sequence as u64)
         .unwrap_or(0);
-
     // Generate prediction
     let prediction = state.fee_analytics_engine.predict(&samples, current_ledger);
     let market_conditions = state
         .fee_analytics_engine
         .get_market_conditions(&samples, current_ledger);
     let model_breakdown = state.fee_analytics_engine.get_model_breakdown(&samples);
-
     // Determine recommended bid based on prediction
     let (recommended_bid, expected_ledgers) = (prediction.priority_bid, 1);
-
     Ok(Json(FeeRecommendationResponse {
         recommended_bid,
         resource_fee_estimate: 0, // Will be calculated based on transaction resources
@@ -1660,7 +1529,6 @@ async fn fee_recommend(
         timestamp: chrono::Utc::now(),
     }))
 }
-
 #[utoipa::path(
     get,
     path = "/fees/history",
@@ -1679,26 +1547,22 @@ async fn fee_history(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<FeeHistoryResponse>, AppError> {
     tracing::info!("Fetching fee history");
-
     let limit = 50; // Default limit
     let samples = state
         .fee_store
         .get_recent_samples(limit)
         .await
         .map_err(|e| AppError::Internal(format!("Failed to fetch fee history: {}", e)))?;
-
     let total_count = state
         .fee_store
         .get_sample_count()
         .await
         .map_err(|e| AppError::Internal(format!("Failed to get sample count: {}", e)))?;
-
     Ok(Json(FeeHistoryResponse {
         samples,
         total_count,
     }))
 }
-
 #[utoipa::path(
     get,
     path = "/fees/analytics",
@@ -1712,25 +1576,21 @@ async fn fee_analytics(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     tracing::info!("Fetching fee analytics");
-
     // Get recent samples for analysis
     let samples = state
         .fee_store
         .get_recent_samples(200)
         .await
         .map_err(|e| AppError::Internal(format!("Failed to fetch fee data: {}", e)))?;
-
     let current_ledger = samples
         .first()
         .map(|s| s.ledger_sequence as u64)
         .unwrap_or(0);
-
     let prediction = state.fee_analytics_engine.predict(&samples, current_ledger);
     let market_conditions = state
         .fee_analytics_engine
         .get_market_conditions(&samples, current_ledger);
     let model_breakdown = state.fee_analytics_engine.get_model_breakdown(&samples);
-
     let response = serde_json::json!({
         "current_ledger": current_ledger,
         "prediction": prediction,
@@ -1739,10 +1599,8 @@ async fn fee_analytics(
         "sample_count": samples.len(),
         "timestamp": chrono::Utc::now(),
     });
-
     Ok(Json(response))
 }
-
 #[derive(OpenApi)]
 #[openapi(
     paths(
@@ -1785,7 +1643,6 @@ async fn fee_analytics(
     )
 )]
 struct ApiDoc;
-
 #[derive(Debug, Deserialize, ToSchema)]
 struct BatchStateItem {
     /// Contract identifier used to group the response.
@@ -1793,23 +1650,19 @@ struct BatchStateItem {
     /// Base64-encoded ledger key XDR values to fetch for this contract.
     key_paths: Vec<String>,
 }
-
 #[derive(Debug, Deserialize, ToSchema)]
 struct BatchStateRequest {
     contracts: Vec<BatchStateItem>,
 }
-
 #[derive(Debug, Serialize, ToSchema)]
 struct ContractStateResult {
     contract_id: String,
     entries: Vec<serde_json::Value>,
 }
-
 #[derive(Debug, Serialize, ToSchema)]
 struct BatchStateResponse {
     contracts: Vec<ContractStateResult>,
 }
-
 #[utoipa::path(
     post,
     path = "/api/v1/contracts/batch-state",
@@ -1831,7 +1684,6 @@ async fn batch_contract_state(
             "contracts must contain a contract_id and at least one key path".to_string(),
         ));
     }
-
     let keys: Vec<String> = request
         .contracts
         .iter()
@@ -1872,10 +1724,8 @@ async fn batch_contract_state(
         .and_then(serde_json::Value::as_array)
         .cloned()
         .unwrap_or_default();
-
     Ok(Json(group_batch_entries(&request.contracts, &entries)))
 }
-
 fn group_batch_entries(
     requested: &[BatchStateItem],
     entries: &[serde_json::Value],
@@ -1899,26 +1749,26 @@ fn group_batch_entries(
             .collect(),
     }
 }
-
-async fn incoming_webhook(
-    ValidatedWebhook(body): ValidatedWebhook,
-) -> impl IntoResponse {
-    tracing::info!("Received authenticated inbound webhook of length {}", body.len());
+async fn incoming_webhook(ValidatedWebhook(body): ValidatedWebhook) -> impl IntoResponse {
+    tracing::info!(
+        "Received authenticated inbound webhook of length {}",
+        body.len()
+    );
     StatusCode::OK
 }
-
 async fn health_check() -> &'static str {
     "OK"
 }
-
 /// `/healthz` — Kubernetes liveness probe.
 ///
 /// Returns 200 OK as long as the process is running. No external dependency
 /// checks are performed; a live process is always considered alive.
 async fn healthz() -> impl IntoResponse {
-    (StatusCode::OK, axum::Json(serde_json::json!({"status": "ok"})))
+    (
+        StatusCode::OK,
+        axum::Json(serde_json::json!({"status": "ok"})),
+    )
 }
-
 /// `/readyz` — Kubernetes readiness probe.
 ///
 /// Evaluates DB and RPC connectivity. Returns 200 when all checks pass, or
@@ -1931,7 +1781,6 @@ async fn readyz(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         .await
         .iter()
         .any(|p| p.healthy);
-
     if rpc_healthy {
         (
             StatusCode::OK,
@@ -1954,19 +1803,16 @@ async fn readyz(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         )
     }
 }
-
 async fn registry_providers(
     State(state): State<Arc<AppState>>,
 ) -> Json<Vec<crate::rpc_provider::ProviderHealthReport>> {
     Json(state.provider_registry.provider_reports().await)
 }
-
 async fn registry_peers(
     State(state): State<Arc<AppState>>,
 ) -> Json<Vec<crate::rpc_provider::PeerHealthReport>> {
     Json(state.provider_registry.peer_reports().await)
 }
-
 async fn registry_gossip(
     State(state): State<Arc<AppState>>,
     Json(snapshot): Json<RegistrySnapshot>,
@@ -1974,31 +1820,31 @@ async fn registry_gossip(
     state.provider_registry.merge_snapshot(snapshot).await;
     Json(state.provider_registry.registry_snapshot().await)
 }
-
 #[tokio::main]
 async fn main() {
     opentelemetry::global::set_text_map_propagator(
         opentelemetry_sdk::propagation::TraceContextPropagator::new(),
     );
-
     // Config is loaded before the tracing subscriber so `rust_log` (sourced
     // from the `RUST_LOG` env var, defaulting to "info") can drive log level
     // filtering without recompiling the binary.
     let config = load_config().expect("Failed to load configuration");
-
     // ── Tracing init (#572: JSON format + x-request-id correlation) ────
-    let log_json = env::var("LOG_FORMAT").map(|v| v.to_lowercase() == "json").unwrap_or(false);
+    let log_json = env::var("LOG_FORMAT")
+        .map(|v| v.to_lowercase() == "json")
+        .unwrap_or(false);
     let filter = EnvFilter::from_default_env();
     if log_json {
         tracing_subscriber::registry()
-            .with(filter)
             .with(tracing_subscriber::fmt::layer().json())
+            .with(build_env_filter(&config.rust_log))
             .init();
     } else {
+        tracing_subscriber::registry()
             .with(tracing_subscriber::fmt::layer())
+            .with(build_env_filter(&config.rust_log))
+            .init();
     }
-        .with(build_env_filter(&config.rust_log))
-
     tracing::info!(rust_log = %config.rust_log, "SoroScope Starting...");
     tracing::info!("SoroScope initialized with config: {:?}", config);
     tracing::info!(
@@ -2010,17 +1856,13 @@ async fn main() {
             "Inbound webhook secret is not configured; set INBOUND_WEBHOOK_SECRET or SOROSCOPE_INBOUND_WEBHOOK_SECRET"
         );
     }
-
     let args: Vec<String> = env::args().collect();
-
     if args.len() > 1 && args[1] == "benchmark" {
         tracing::info!("Starting SoroScope Benchmark...");
-
         let possible_paths = vec![
             "target/wasm32-unknown-unknown/release/soroban_token_contract.wasm",
             "../target/wasm32-unknown-unknown/release/soroban_token_contract.wasm",
         ];
-
         let mut wasm_path = None;
         for p in possible_paths {
             let path = PathBuf::from(p);
@@ -2029,7 +1871,6 @@ async fn main() {
                 break;
             }
         }
-
         if let Some(path) = wasm_path {
             let db_path = env::var("SOROSCOPE_DB_PATH")
                 .unwrap_or_else(|_| "soroscope_metrics.db".to_string());
@@ -2044,10 +1885,8 @@ async fn main() {
                 "Could not find soroban_token_contract.wasm. Build the contract first."
             );
         }
-
         return;
     }
-
     // ── CLI: merkle subcommand ──────────────────────────────────────────
     if args.len() > 1 && args[1] == "merkle" {
         if args.len() < 4 {
@@ -2057,7 +1896,6 @@ async fn main() {
             eprintln!("  proof <leaf_index> <leaf1> <leaf2> ... Generate a Merkle proof for the given leaf index");
             std::process::exit(1);
         }
-
         let command = &args[2];
         match command.as_str() {
             "build" => {
@@ -2122,13 +1960,10 @@ async fn main() {
                 std::process::exit(1);
             }
         }
-
         return;
     }
-
     // Default Web Server
     println!("SoroScope CLI Initialized. Run with 'benchmark' argument to profile token contract.");
-
     // ── CLI: compare subcommand ──────────────────────────────────────────
     if args.len() > 1 && args[1] == "compare" {
         if args.len() < 4 {
@@ -2139,10 +1974,8 @@ async fn main() {
             eprintln!("  <base.wasm>     Path to the reference (base) version WASM file");
             std::process::exit(1);
         }
-
         let current_path = PathBuf::from(&args[2]);
         let base_path = PathBuf::from(&args[3]);
-
         if !current_path.exists() {
             eprintln!(
                 "Error: Current WASM file not found: {}",
@@ -2154,16 +1987,13 @@ async fn main() {
             eprintln!("Error: Base WASM file not found: {}", base_path.display());
             std::process::exit(1);
         }
-
         let providers = build_providers(&config);
         let registry = rpc_provider::ProviderRegistry::new(providers);
         let engine = SimulationEngine::with_registry(std::sync::Arc::clone(&registry));
-
         let compare_mode = comparison::CompareMode::LocalVsLocal {
             current_wasm: current_path,
             base_wasm: base_path,
         };
-
         match comparison::run_comparison(&engine, compare_mode).await {
             Ok(report) => {
                 comparison::print_report(&report);
@@ -2173,10 +2003,8 @@ async fn main() {
                 std::process::exit(1);
             }
         }
-
         return;
     }
-
     // ── CLI: export subcommand ──────────────────────────────────────────
     if args.len() > 1 && args[1] == "export" {
         if args.len() < 6 {
@@ -2186,18 +2014,14 @@ async fn main() {
             eprintln!("\nSimulate a transaction and export the touched state to a JSON file.");
             std::process::exit(1);
         }
-
         let contract_id = &args[2];
         let function = &args[3];
         let args_json = &args[4];
         let output_file = &args[5];
-
         let parsed_args: Vec<String> = serde_json::from_str(args_json).unwrap_or_default();
-
         let providers = build_providers(&config);
         let registry = rpc_provider::ProviderRegistry::new(providers);
         let engine = SimulationEngine::with_registry(std::sync::Arc::clone(&registry));
-
         match engine
             .simulate_from_contract_id(contract_id, function, parsed_args, None, None, None)
             .await
@@ -2220,10 +2044,8 @@ async fn main() {
                 std::process::exit(1);
             }
         }
-
         return;
     }
-
     // ── CLI: restore subcommand ──────────────────────────────────────────
     if args.len() > 1 && args[1] == "restore" {
         if args.len() < 6 {
@@ -2231,23 +2053,18 @@ async fn main() {
             eprintln!("\nRestore state from a JSON file and run a simulation.");
             std::process::exit(1);
         }
-
         let snapshot_file = &args[2];
         let contract_id = &args[3];
         let function = &args[4];
         let args_json = &args[5];
-
         let snapshot_json =
             std::fs::read_to_string(snapshot_file).expect("Failed to read snapshot file");
         let snapshot: crate::simulation::SimulationStateSnapshot =
             serde_json::from_str(&snapshot_json).expect("Failed to parse snapshot JSON");
-
         let parsed_args: Vec<String> = serde_json::from_str(args_json).unwrap_or_default();
-
         let providers = build_providers(&config);
         let registry = rpc_provider::ProviderRegistry::new(providers);
         let engine = SimulationEngine::with_registry(std::sync::Arc::clone(&registry));
-
         match engine
             .simulate_from_contract_id(
                 contract_id,
@@ -2271,10 +2088,8 @@ async fn main() {
                 std::process::exit(1);
             }
         }
-
         return;
     }
-
     // ── CLI: reindex subcommand ──────────────────────────────────────────
     if args.len() > 1 && args[1] == "reindex" {
         // Parse --start-ledger and --end-ledger flags
@@ -2296,13 +2111,10 @@ async fn main() {
                 }
             }
         }
-
         let (start, end) = match (start_ledger, end_ledger) {
             (Some(s), Some(e)) if s <= e => (s, e),
             _ => {
-                eprintln!(
-                    "Usage: soroscope-cli reindex --start-ledger <N> --end-ledger <M>"
-                );
+                eprintln!("Usage: soroscope-cli reindex --start-ledger <N> --end-ledger <M>");
                 eprintln!("\nRe-fetch and re-process ledger fee data for the given ledger range.");
                 eprintln!("\nArguments:");
                 eprintln!("  --start-ledger <N>  First ledger sequence to re-index (inclusive)");
@@ -2310,42 +2122,34 @@ async fn main() {
                 std::process::exit(1);
             }
         };
-
         tracing::info!(
             start_ledger = start,
             end_ledger = end,
             "Starting historical ledger re-indexing"
         );
-
         let db_pool = sqlx::SqlitePool::connect(&config.database_url)
             .await
             .expect("Failed to connect to database");
-
         sqlx::migrate!()
             .run(&db_pool)
             .await
             .expect("Failed to run database migrations");
-
         let fee_store = Arc::new(FeeStore::new(db_pool));
         let providers = build_providers(&config);
         let registry = Arc::new(ProviderRegistry::new(providers));
-
         let collector_config = FeeCollectorConfig {
             collection_interval_secs: 5,
             batch_size: 50,
             request_timeout: std::time::Duration::from_secs(30),
         };
-
         let collector = Arc::new(FeeCollector::new(
             Arc::clone(&registry),
             Arc::clone(&fee_store),
             collector_config,
         ));
-
         let total = end - start + 1;
         let mut processed: u64 = 0;
         let mut errors: u64 = 0;
-
         for seq in start..=end {
             match collector.fetch_and_store_ledger(seq).await {
                 Ok(()) => {
@@ -2369,16 +2173,10 @@ async fn main() {
                 }
             }
         }
-
-        println!(
-            "Re-indexing complete. Processed: {processed}/{total}, Errors: {errors}"
-        );
-
+        println!("Re-indexing complete. Processed: {processed}/{total}, Errors: {errors}");
         return;
     }
-
     tracing::info!("Starting SoroScope API Server...");
-
     let auth_state = Arc::new(auth::AuthState::new(
         config.jwt_private_key.clone(),
         None,
@@ -2392,19 +2190,16 @@ async fn main() {
     // Broadcast channel used to stop all background worker loops on process exit.
     let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
     let mut worker_handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
-
     // ── Multi-node RPC setup ────────────────────────────────────────────
     let providers = build_providers(&config);
     let provider_names: Vec<&str> = providers.iter().map(|p| p.name.as_str()).collect();
     tracing::info!(providers = ?provider_names, "RPC provider pool");
-
     let registry = ProviderRegistry::new_with_config(providers, build_registry_config(&config));
     tracing::info!(
         instance_id = registry.instance_id(),
         public_url = ?registry.public_base_url(),
         "Provider registry initialized"
     );
-
     // Spawn background health checker.
     let health_interval = std::time::Duration::from_secs(config.health_check_interval_secs);
     worker_handles.push(registry.spawn_health_checker(health_interval, shutdown_tx.subscribe()));
@@ -2412,14 +2207,12 @@ async fn main() {
         interval_secs = config.health_check_interval_secs,
         "Background RPC health checker started"
     );
-
     let gossip_interval = std::time::Duration::from_secs(config.gossip_interval_secs);
     worker_handles.push(registry.spawn_gossip_task(gossip_interval, shutdown_tx.subscribe()));
     tracing::info!(
         interval_secs = config.gossip_interval_secs,
         "Provider gossip sync started"
     );
-
     let simulation_timeout = std::time::Duration::from_secs(config.simulation_timeout_secs);
     let simulation_mode = SimulationMode::from_config(&config.simulation_mode)
         .expect("Invalid simulation mode configuration");
@@ -2428,30 +2221,28 @@ async fn main() {
         "Simulation timeout configured"
     );
     tracing::info!(mode = ?simulation_mode, "Simulation mode configured");
-
     // Initialize the dedicated event worker pool
-    let event_pool = Arc::new(EventWorkerPool::new(config.event_worker_threads)
-        .expect("Failed to build event worker pool"));
-    tracing::info!("Dedicated event worker pool initialized with {} threads", config.event_worker_threads);
-
+    let event_pool = Arc::new(
+        EventWorkerPool::new(config.event_worker_threads)
+            .expect("Failed to build event worker pool"),
+    );
+    tracing::info!(
+        "Dedicated event worker pool initialized with {} threads",
+        config.event_worker_threads
+    );
     // ── Fee Market Setup ────────────────────────────────────────────────
     let database_url = &config.database_url;
     tracing::info!(database_url = %database_url, "Initializing database");
-
     let db_pool = sqlx::SqlitePool::connect(database_url)
         .await
         .expect("Failed to connect to database");
-
     // Run migrations
     sqlx::migrate!()
         .run(&db_pool)
         .await
         .expect("Failed to run database migrations");
-
     tracing::info!("Database migrations completed");
-
     let metrics = Arc::new(AppMetrics::new().expect("Failed to initialize Prometheus metrics"));
-
     let fee_store = Arc::new(FeeStore::new(db_pool.clone()));
     let fee_analytics_engine = FeeAnalyticsEngine::new();
     let job_queue_config = JobQueueConfig {
@@ -2464,10 +2255,8 @@ async fn main() {
         .expect("Failed to initialize job queue");
     // ── WebSocket event bus (#565: configurable bounded channel) ───────
     let simulation_bus = SimulationBus::with_capacity(config.event_bus_capacity);
-
     // Spawn background cleanup task
     job_queue.spawn_cleanup_task();
-
     let job_worker = JobWorker::new(
         job_queue.clone(),
         SimulationEngine::with_registry_and_timeout_and_mode(
@@ -2479,26 +2268,21 @@ async fn main() {
         job_queue_config,
     )
     .with_bus(Arc::clone(&simulation_bus));
-
     let bus_worker_shutdown = shutdown_tx.subscribe();
     worker_handles.push(tokio::spawn(async move {
         job_worker.run(bus_worker_shutdown).await;
     }));
-
     // ── Distributed Job Queue Setup ─────────────────────────────────────
     let job_config = JobQueueConfig {
         job_timeout_secs: config.job_timeout_secs,
         max_concurrent_jobs: config.max_concurrent_jobs,
         ..Default::default()
     };
-
     let job_queue = JobQueue::new(&config.database_url, &config.redis_url, job_config.clone())
         .await
         .expect("Failed to initialize JobQueue");
-
     // Spawn background cleanup task
     worker_handles.push(job_queue.spawn_cleanup_task(shutdown_tx.subscribe()));
-
     // Periodically sample Redis job-queue depth into the `job_queue_depth` gauge.
     let depth_queue = job_queue.clone();
     let depth_metrics = Arc::clone(&metrics);
@@ -2519,7 +2303,6 @@ async fn main() {
             }
         }
     });
-
     // Spawn worker
     let worker = JobWorker::new(
         job_queue.clone(),
@@ -2527,14 +2310,11 @@ async fn main() {
         InsightsEngine::new(),
         job_config,
     );
-
     let worker_shutdown = shutdown_tx.subscribe();
     worker_handles.push(tokio::spawn(async move {
         worker.run(worker_shutdown).await;
     }));
-
     tracing::info!("Job queue and worker started (Redis backend)");
-
     // Start background fee collector if enabled
     if config.fee_analysis_enabled {
         let collector_config = FeeCollectorConfig {
@@ -2542,7 +2322,6 @@ async fn main() {
             batch_size: 10,
             request_timeout: std::time::Duration::from_secs(10),
         };
-
         let leader_redis_client = redis::Client::open(config.redis_url.as_str())
             .expect("Failed to create Redis client for leader lock");
         let leader_lock = Arc::new(leader_lock::RedisLeaderLock::new(
@@ -2550,7 +2329,6 @@ async fn main() {
             "soroscope:leader:fee_collector",
             std::time::Duration::from_secs(config.fee_collection_interval_secs.max(1) * 3),
         ));
-
         let collector = Arc::new(FeeCollector::new(
             Arc::clone(&registry),
             Arc::clone(&fee_store),
@@ -2558,17 +2336,14 @@ async fn main() {
             Arc::clone(&metrics),
             leader_lock,
         ));
-
         let fee_shutdown = shutdown_tx.subscribe();
         worker_handles.push(tokio::spawn(async move {
             collector.run_collection_loop(fee_shutdown).await;
         }));
-
         tracing::info!(
             interval_secs = config.fee_collection_interval_secs,
             "Fee market collector started"
         );
-
         // Schedule periodic cleanup of old fee data
         let cleanup_store = Arc::clone(&fee_store);
         let retention_days = config.fee_retention_days;
@@ -2602,16 +2377,11 @@ async fn main() {
     } else {
         tracing::info!("Fee market analysis is disabled");
     }
-
     // ── Persistent Cache Setup (L2) ─────────────────────────────────────
     let sled_db = sled::open("soroscope_cache").expect("Failed to open sled database");
     let simulation_cache = SimulationCache::new(&sled_db);
     let contract_cache = Arc::new(ContractCache::new(&sled_db));
-
-    let app_metrics = Arc::new(
-        AppMetrics::new().expect("Failed to initialize Prometheus metrics"),
-    );
-
+    let app_metrics = Arc::new(AppMetrics::new().expect("Failed to initialize Prometheus metrics"));
     let app_state = Arc::new(AppState {
         engine: SimulationEngine::with_registry_and_cache(
             Arc::clone(&registry),
@@ -2630,7 +2400,6 @@ async fn main() {
         metrics,
         simulation_bus,
     });
-
     // ── Issue #592: System Resource Alarm Monitor ────────────────────────
     //
     // Spawn an internal tokio task that periodically samples host CPU
@@ -2660,7 +2429,6 @@ async fn main() {
     // query instead of multiple REST round-trips.
     let graphql_schema =
         graphql::build_schema(app_state.job_queue.clone(), app_state.engine.clone());
-
     let cors = CorsLayer::new().allow_origin(Any);
     let cors = soroscope_core::cors::build_cors_layer(&config.cors_allowed_origins);
     let cors = {
@@ -2676,8 +2444,8 @@ async fn main() {
                 .filter_map(|s| s.trim().parse::<HeaderValue>().ok())
                 .collect();
             CorsLayer::new().allow_origin(origins)
+        }
     };
-
     let protected = Router::new()
         .route("/analyze", post(analyze))
         .route("/analyze/wasm", post(analyze_wasm))
@@ -2686,7 +2454,6 @@ async fn main() {
         .route("/analyze/compare", post(compare_handler))
         .route("/analyze/gas-golfing", post(analyze_gas_golfing))
         .route_layer(middleware::from_fn(auth::auth_middleware));
-
     let app = Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .route(
@@ -2715,9 +2482,9 @@ async fn main() {
         .route("/api/v1/webhooks/incoming", post(incoming_webhook))
         .merge(protected)
         .layer(Extension(auth_state))
-        .layer(Extension(webhook_validation::InboundWebhookSecret(Arc::new(
-            config.inbound_webhook_secret.clone(),
-        ))))
+        .layer(Extension(webhook_validation::InboundWebhookSecret(
+            Arc::new(config.inbound_webhook_secret.clone()),
+        )))
         // GraphQL contract execution history + token metadata query layer.
         .route(
             "/graphql",
@@ -2734,12 +2501,10 @@ async fn main() {
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .with_state(app_state); // ← thread AppState through all handlers
-
     let bind_addr = format!("0.0.0.0:{}", config.server_port);
     let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
         .expect("Failed to bind to address");
-
     tracing::info!(
         "Server listening on http://{}",
         listener.local_addr().unwrap()
@@ -2748,18 +2513,15 @@ async fn main() {
         "Swagger UI available at http://{}/swagger-ui",
         listener.local_addr().unwrap()
     );
-
     // ── Graceful shutdown (#573: SIGTERM / SIGINT) ────────────────────
     // ── Spawn gRPC server on its dedicated port ──────────────────────────
     tokio::spawn(async move {
         grpc::serve(grpc_addr, grpc_bus).await;
     });
-
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal(shutdown_tx.clone()))
         .await
         .expect("Server failed to start");
-
     // After the HTTP server stops, wait for all background worker loops to exit.
     tracing::info!(
         workers = worker_handles.len(),
@@ -2768,24 +2530,16 @@ async fn main() {
     join_worker_handles(worker_handles).await;
     tracing::info!("All background workers stopped");
 }
-
 /// Wait for Ctrl+C / SIGTERM, then broadcast shutdown to all worker loops.
 async fn shutdown_signal(shutdown_tx: tokio::sync::broadcast::Sender<()>) {
     let ctrl_c = async {
         tokio::signal::ctrl_c()
+            .await
             .expect("failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]
     let terminate = async {
-        .with_graceful_shutdown(shutdown_signal())
-
-    tracing::info!("Server shut down gracefully.");
-
-/// Waits for SIGTERM (Unix) or Ctrl-C (all platforms) and resolves once either
-/// signal is received, allowing axum to finish in-flight requests before exit.
-async fn shutdown_signal() {
-    let sigterm = async {
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
             .expect("failed to install SIGTERM handler")
             .recv()
@@ -2802,11 +2556,11 @@ async fn shutdown_signal() {
 
     tracing::info!("Shutdown signal received; notifying background workers");
     let _ = shutdown_tx.send(());
+}
 
 /// Await every worker handle, aborting any that hang past a short grace period.
 async fn join_worker_handles(handles: Vec<tokio::task::JoinHandle<()>>) {
     const WORKER_JOIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
-
     for handle in handles {
         let abort = handle.abort_handle();
         match tokio::time::timeout(WORKER_JOIN_TIMEOUT, handle).await {
@@ -2819,25 +2573,17 @@ async fn join_worker_handles(handles: Vec<tokio::task::JoinHandle<()>>) {
                     "Background worker did not exit within {:?}; aborted",
                     WORKER_JOIN_TIMEOUT
                 );
-    let sigterm = std::future::pending::<()>();
-
-        _ = tokio::signal::ctrl_c() => {
-            tracing::info!("Received SIGINT (Ctrl-C), shutting down…");
-        _ = sigterm => {
-            tracing::info!("Received SIGTERM, shutting down…");
+            }
         }
     }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Integration Tests
 // ─────────────────────────────────────────────────────────────────────────────
-
 #[cfg(any())]
 mod tests {
     use super::*;
     use crate::simulation::{SimulationError, SorobanResources};
-
     #[test]
     fn batch_state_groups_entries_by_requested_contract() {
         let requested = vec![
@@ -2854,19 +2600,16 @@ mod tests {
             serde_json::json!({"key": "key-b", "xdr": "value-b"}),
             serde_json::json!({"key": "key-a", "xdr": "value-a"}),
         ];
-
         let response = group_batch_entries(&requested, &entries);
         assert_eq!(response.contracts.len(), 2);
         assert_eq!(response.contracts[0].contract_id, "CA");
         assert_eq!(response.contracts[0].entries[0]["xdr"], "value-a");
         assert_eq!(response.contracts[1].entries[0]["xdr"], "value-b");
     }
-
     #[test]
     fn test_error_mapping_node_error() {
         let sim_err = SimulationError::NodeError("Invalid contract ID".to_string());
         let app_err: AppError = sim_err.into();
-
         match app_err {
             AppError::BadRequest(msg) => {
                 assert!(msg.contains("Invalid contract ID"));
@@ -2874,12 +2617,10 @@ mod tests {
             _ => panic!("Expected BadRequest, got {:?}", app_err),
         }
     }
-
     #[test]
     fn test_error_mapping_invalid_contract() {
         let sim_err = SimulationError::InvalidContract("Contract not found".to_string());
         let app_err: AppError = sim_err.into();
-
         match app_err {
             AppError::BadRequest(msg) => {
                 assert!(msg.contains("Contract not found"));
@@ -2887,12 +2628,10 @@ mod tests {
             _ => panic!("Expected BadRequest, got {:?}", app_err),
         }
     }
-
     #[test]
     fn test_error_mapping_timeout() {
         let sim_err = SimulationError::NodeTimeout;
         let app_err: AppError = sim_err.into();
-
         match app_err {
             AppError::Internal(msg) => {
                 assert!(msg.contains("timed out"));
@@ -2900,12 +2639,10 @@ mod tests {
             _ => panic!("Expected Internal, got {:?}", app_err),
         }
     }
-
     #[test]
     fn test_error_mapping_rpc_request_failed() {
         let sim_err = SimulationError::RpcRequestFailed("Connection refused".to_string());
         let app_err: AppError = sim_err.into();
-
         match app_err {
             AppError::Internal(msg) => {
                 assert!(msg.contains("Connection refused"));
@@ -2913,13 +2650,11 @@ mod tests {
             _ => panic!("Expected Internal, got {:?}", app_err),
         }
     }
-
     #[test]
     fn test_error_mapping_network_error() {
         // Create a mock reqwest error (we can't easily create one, so test via RpcRequestFailed)
         let sim_err = SimulationError::RpcRequestFailed("Network unreachable".to_string());
         let app_err: AppError = sim_err.into();
-
         match app_err {
             AppError::Internal(msg) => {
                 assert!(msg.contains("Network unreachable"));
@@ -2927,7 +2662,6 @@ mod tests {
             _ => panic!("Expected Internal, got {:?}", app_err),
         }
     }
-
     #[test]
     fn test_resource_report_includes_cost_stroops() {
         let sim_result = SimulationResult {
@@ -2948,10 +2682,8 @@ mod tests {
             state_snapshot: None,
             protocol_version: 0,
         };
-
         let insights_engine = InsightsEngine::new();
         let report = to_report(&sim_result, &insights_engine, None);
-
         assert_eq!(report.cost_stroops, 5000);
         assert_eq!(report.cpu_instructions, 1000000);
         assert_eq!(report.ram_bytes, 2048);
@@ -2959,31 +2691,25 @@ mod tests {
         assert_eq!(report.ledger_write_bytes, 256);
         assert_eq!(report.transaction_size_bytes, 1024);
     }
-
     #[test]
     fn test_app_config_default_simulation_timeout() {
         // Verify the default timeout function returns 30 seconds
         assert_eq!(default_simulation_timeout_secs(), 30);
     }
-
     #[test]
     fn test_app_config_default_simulation_mode() {
         assert_eq!(default_simulation_mode(), "failover");
     }
-
     #[test]
     fn test_simulation_engine_timeout_configurable() {
         use std::time::Duration;
-
         // Create a mock registry (we can't easily create one without mocking)
         // Instead, test that the SimulationEngine has timeout methods
         let engine = SimulationEngine::new("https://test.com".to_string());
-
         // Default should be 30 seconds
         assert_eq!(engine.timeout(), Duration::from_secs(30));
     }
     // ── API integration tests for /analyze/wasm/profile ──────────────────────
-
     /// Build a minimal valid WASM module with one exported function `add` that
     /// returns i32 (i32.const 42; end). Mirrors the helper in simulation.rs.
     fn minimal_wasm_bytes() -> Vec<u8> {
@@ -3009,7 +2735,6 @@ mod tests {
         module.section(&codes);
         module.finish()
     }
-
     fn build_test_app() -> Router {
         use std::sync::Arc;
         let event_pool = Arc::new(EventWorkerPool::new(4).unwrap());
@@ -3033,10 +2758,11 @@ mod tests {
             .route("/api/v1/webhooks/incoming", post(incoming_webhook))
             .merge(protected)
             .layer(Extension(auth_state))
-            .layer(Extension(webhook_validation::InboundWebhookSecret(webhook_secret)))
+            .layer(Extension(webhook_validation::InboundWebhookSecret(
+                webhook_secret,
+            )))
             .with_state(app_state)
     }
-
     fn make_jwt(secret: &str) -> String {
         use jsonwebtoken::{encode, EncodingKey, Header};
         use serde_json::json;
@@ -3051,14 +2777,12 @@ mod tests {
         )
         .unwrap()
     }
-
     #[tokio::test]
     async fn test_profile_endpoint_valid_request_returns_200() {
         use axum::body::Body;
         use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
         use http::{Request, StatusCode};
         use tower::ServiceExt;
-
         let app = build_test_app();
         let wasm_b64 = BASE64.encode(minimal_wasm_bytes());
         let body = serde_json::json!({
@@ -3077,13 +2801,11 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
     }
-
     #[tokio::test]
     async fn test_profile_endpoint_invalid_base64_returns_400() {
         use axum::body::Body;
         use http::{Request, StatusCode};
         use tower::ServiceExt;
-
         let app = build_test_app();
         let body = serde_json::json!({
             "wasm_bytes": "!!!not-valid-base64!!!",
@@ -3101,14 +2823,12 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
-
     #[tokio::test]
     async fn test_profile_endpoint_invalid_wasm_returns_400() {
         use axum::body::Body;
         use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
         use http::{Request, StatusCode};
         use tower::ServiceExt;
-
         let app = build_test_app();
         let bad_wasm = BASE64.encode(b"this is not wasm");
         let body = serde_json::json!({
@@ -3127,14 +2847,12 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
-
     #[tokio::test]
     async fn test_profile_endpoint_unknown_function_returns_400() {
         use axum::body::Body;
         use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
         use http::{Request, StatusCode};
         use tower::ServiceExt;
-
         let app = build_test_app();
         let wasm_b64 = BASE64.encode(minimal_wasm_bytes());
         let body = serde_json::json!({
@@ -3153,14 +2871,12 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
-
     #[tokio::test]
     async fn test_profile_endpoint_no_jwt_returns_401() {
         use axum::body::Body;
         use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
         use http::{Request, StatusCode};
         use tower::ServiceExt;
-
         let app = build_test_app();
         let wasm_b64 = BASE64.encode(minimal_wasm_bytes());
         let body = serde_json::json!({
@@ -3178,7 +2894,6 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 }
-
 async fn analyze_simulation(
     State(simulation_service): State<Arc<SimulationService>>,
     Json(metric): Json<SimulationMetric>,
@@ -3186,5 +2901,3 @@ async fn analyze_simulation(
     let result = simulation_service.record_and_analyze(metric).await?;
     Ok(Json(result))
 }
-
-

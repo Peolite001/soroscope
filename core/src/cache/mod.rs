@@ -16,9 +16,9 @@ pub mod disk;
 // hot ledger entries avoid hitting disk.
 
 use crate::simulation::SimulationResult;
+use crate::simulation::{SimulationResult, SorobanResources};
 use moka::future::Cache;
 use moka::sync::Cache as SyncCache;
-use crate::simulation::{SimulationResult, SorobanResources};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sled::{Db, Tree};
@@ -46,9 +46,7 @@ fn ledger_cache_ttl() -> Duration {
         .unwrap_or(Duration::from_secs(LEDGER_CACHE_TTL_SECS_DEFAULT))
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Debug, Serialize, Deserialize)]
 struct CacheEntry<T> {
     data: T,
     ledger_sequence: u64,

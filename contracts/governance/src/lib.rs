@@ -1,8 +1,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, Map, String,
-    contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, String, Vec,
+    contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, Map, String, Vec,
 };
 
 #[cfg(test)]
@@ -417,17 +416,9 @@ impl GovernanceContract {
         Ok(votes.checked_mul(votes).ok_or(Error::InvalidCredits)?)
     }
 
-    pub fn get_vote_receipt(
-        env: Env,
-        proposal_id: u32,
-        voter: Address,
-    ) -> Option<VoteReceipt> {
+    pub fn get_vote_receipt(env: Env, proposal_id: u32, voter: Address) -> Option<VoteReceipt> {
         let proposal = get_proposal(&env, proposal_id).ok()?;
         proposal.voter_receipts.get(voter)
-    pub fn get_vote_receipt(env: Env, proposal_id: u32, voter: Address) -> Option<VoteReceipt> {
-        env.storage()
-            .persistent()
-            .get(&DataKey::Receipt(proposal_id, voter))
     }
 
     pub fn cast_vote(

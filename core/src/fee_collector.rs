@@ -106,15 +106,13 @@ impl FeeCollector {
                     tracing::info!("Fee collector shutting down");
                     break;
                 }
-                _ = interval.tick() => {
-                        result = self.collect_latest_fees() => {
-                            if let Err(e) = result {
-                                tracing::error!(error = %e, "Failed to collect fee data");
-            interval.tick().await;
+                _ = interval.tick() => {}
+            }
 
             if !self.leader_lock.try_acquire_or_renew().await {
                 tracing::debug!("not leader this cycle, skipping fee collection");
                 continue;
+            }
 
             let started_at = Instant::now();
             let result = self.collect_latest_fees().await;
@@ -125,11 +123,12 @@ impl FeeCollector {
 
             match result {
                 Ok(true) => {
-                        .events_processed_total
-                        .inc();
+                    self.metrics.events_processed_total.inc();
+                }
                 Ok(false) => {}
                 Err(e) => {
-                        .indexing_errors_total
+                    tracing::error!(error = %e, "Failed to collect fee data");
+                    self.metrics.indexing_errors_total.inc();
                 }
             }
         }
