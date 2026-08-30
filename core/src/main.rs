@@ -1,4 +1,4 @@
-```rust
+
 #![allow(dead_code)]
 
 mod auth;
@@ -101,13 +101,12 @@ struct AppConfig {
     /// surface is stable when Redis is wired in.
     redis_url: String,
     /// JSON-encoded array of RPC provider objects. Example:
-    /// ```json
+    /// json
     /// [
     ///   {"name":"stellar-testnet","url":"[https://soroban-testnet.stellar.org](https://soroban-testnet.stellar.org)"},
     ///   {"name":"blockdaemon","url":"[https://soroban.blockdaemon.com](https://soroban.blockdaemon.com)","auth_header":"X-API-Key","auth_value":"KEY"}
     /// ]
-    /// ```
-    /// When empty or absent the engine falls back to `soroban_rpc_url`.
+    ///     /// When empty or absent the engine falls back to `soroban_rpc_url`.
     #[serde(default)]
     rpc_providers: String,
     /// Stable node identifier used for gossip snapshots.
@@ -3188,4 +3187,4 @@ async fn analyze_simulation(
     Ok(Json(result))
 }
 
-```
+

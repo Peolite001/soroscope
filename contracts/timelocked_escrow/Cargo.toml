@@ -1,4 +1,3 @@
-[workspace]
 
 [package]
 name = "soroban-timelocked-escrow"

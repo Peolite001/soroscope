@@ -9,11 +9,11 @@
 //! layers so state survives restarts.
 
 pub mod disk;
-//!
-//! `ContractCache` follows the same L1/L2 shape for active ledger entries:
-//! a thread-safe in-memory LRU cache (`ledger_memory`, configurable TTL)
-//! sits in front of the Sled-backed `ledger_tree`, so repeated reads for
-//! hot ledger entries avoid hitting disk.
+//
+// `ContractCache` follows the same L1/L2 shape for active ledger entries:
+// a thread-safe in-memory LRU cache (`ledger_memory`, configurable TTL)
+// sits in front of the Sled-backed `ledger_tree`, so repeated reads for
+// hot ledger entries avoid hitting disk.
 
 use crate::simulation::SimulationResult;
 use moka::future::Cache;

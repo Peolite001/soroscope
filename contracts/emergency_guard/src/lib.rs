@@ -653,20 +653,22 @@ impl EmergencyGuardTrait for DefaultEmergencyGuard {
         Ok(())
     }
 
-    /// Unpause a specific operation (guardians preferred, admins as fallback)
-    fn unpause(env: &Env, operation: u32) -> Result<(), GuardError> {
+    /// Unpause a specific operation (admins only)
+    fn unpause(env: &Env, admin: Address, operation: u32) -> Result<(), GuardError> {
+        admin.require_auth();
+        if !EmergencyGuard::is_admin_internal(env, &admin) {
+            return Err(GuardError::Unauthorized);
+        }
         Self::set_pause_state(env, operation, false)
     }
 
-    /// Unpause all operations (guardians preferred, admins as fallback)
-    fn unpause_all(env: &Env) -> Result<(), GuardError> {
-        let guardians = EmergencyGuard::get_guardians(env.clone());
-        let actor = guardians.get(0).or_else(|| EmergencyGuard::get_admins(env.clone()).get(0));
-        if let Some(actor) = actor {
-            EmergencyGuard::set_pause(env.clone(), actor, u32::MAX, false)
-        } else {
-            Err(GuardError::Unauthorized)
+    /// Unpause all operations (admins only)
+    fn unpause_all(env: &Env, admin: Address) -> Result<(), GuardError> {
+        admin.require_auth();
+        if !EmergencyGuard::is_admin_internal(env, &admin) {
+            return Err(GuardError::Unauthorized);
         }
+        Self::set_pause_state(env, u32::MAX, false)
     }
 
     /// Emergency pause all operations (requires guardian multi-sig approval)
@@ -840,12 +842,20 @@ impl EmergencyGuardTrait for DefaultEmergencyGuard {
 /// Extension methods for unpause operations
 impl DefaultEmergencyGuard {
     /// Unpause a specific operation (uses set_pause_state internally)
-    pub fn unpause(env: &Env, operation: u32) -> Result<(), GuardError> {
+    pub fn unpause(env: &Env, admin: Address, operation: u32) -> Result<(), GuardError> {
+        admin.require_auth();
+        if !EmergencyGuard::is_admin_internal(env, &admin) {
+            return Err(GuardError::Unauthorized);
+        }
         Self::set_pause_state(env, operation, false)
     }
 
     /// Unpause all operations (single-admin helper; same effect as `unpause_all`)
-    pub fn unpause_all_emergency(env: &Env) -> Result<(), GuardError> {
+    pub fn unpause_all_emergency(env: &Env, admin: Address) -> Result<(), GuardError> {
+        admin.require_auth();
+        if !EmergencyGuard::is_admin_internal(env, &admin) {
+            return Err(GuardError::Unauthorized);
+        }
         let pause_state = PauseType::new(0);
         env.storage()
             .instance()
@@ -914,8 +924,8 @@ pub trait EmergencyGuardTrait {
     fn check_not_paused(env: &Env, operation: u32) -> Result<(), GuardError>;
     fn get_pause_state(env: &Env) -> u32;
     fn set_pause_state(env: &Env, operation: u32, paused: bool) -> Result<(), GuardError>;
-    fn unpause(env: &Env, operation: u32) -> Result<(), GuardError>;
-    fn unpause_all(env: &Env) -> Result<(), GuardError>;
+    fn unpause(env: &Env, admin: Address, operation: u32) -> Result<(), GuardError>;
+    fn unpause_all(env: &Env, admin: Address) -> Result<(), GuardError>;
     fn emergency_pause_all(env: &Env, approvers: Vec<Address>) -> Result<(), GuardError>;
     fn resume_all(env: &Env, approvers: Vec<Address>) -> Result<(), GuardError>;
     fn init_guard(env: &Env, admins: Vec<Address>, threshold: u32) -> Result<(), GuardError>;
@@ -954,23 +964,19 @@ impl DefaultEmergencyGuard {
             Err(GuardError::Unauthorized)
         }
     }
-    pub fn unpause(env: &Env, operation: u32) -> Result<(), GuardError> {
-        let guardians = EmergencyGuard::get_guardians(env.clone());
-        let actor = guardians.get(0).or_else(|| EmergencyGuard::get_admins(env.clone()).get(0));
-        if let Some(actor) = actor {
-            EmergencyGuard::set_pause(env.clone(), actor, operation, false)
-        } else {
-            Err(GuardError::Unauthorized)
+    pub fn unpause(env: &Env, admin: Address, operation: u32) -> Result<(), GuardError> {
+        admin.require_auth();
+        if !EmergencyGuard::is_admin_internal(env, &admin) {
+            return Err(GuardError::Unauthorized);
         }
+        EmergencyGuard::set_pause(env.clone(), admin, operation, false)
     }
-    pub fn unpause_all(env: &Env) -> Result<(), GuardError> {
-        let guardians = EmergencyGuard::get_guardians(env.clone());
-        let actor = guardians.get(0).or_else(|| EmergencyGuard::get_admins(env.clone()).get(0));
-        if let Some(actor) = actor {
-            EmergencyGuard::set_pause(env.clone(), actor, u32::MAX, false)
-        } else {
-            Err(GuardError::Unauthorized)
+    pub fn unpause_all(env: &Env, admin: Address) -> Result<(), GuardError> {
+        admin.require_auth();
+        if !EmergencyGuard::is_admin_internal(env, &admin) {
+            return Err(GuardError::Unauthorized);
         }
+        EmergencyGuard::set_pause(env.clone(), admin, u32::MAX, false)
     }
     pub fn emergency_pause_all(env: &Env, approvers: Vec<Address>) -> Result<(), GuardError> {
         EmergencyGuard::emergency_pause(env.clone(), approvers)
