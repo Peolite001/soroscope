@@ -22,6 +22,8 @@ pub enum Error {
     OracleStaleness = 5,
     /// Returned when `window_seconds` is zero during TWAP initialization.
     InvalidWindow = 6,
+    /// Returned when an oracle returns a stale price.
+    InvalidOraclePrice = 7,
 }
 
 /// A price record returned by an oracle source, including a Unix timestamp
@@ -127,7 +129,7 @@ impl OracleAggregator {
             // than `max_age_seconds` before the current ledger time.
             let age = now.saturating_sub(record.timestamp);
             if age > max_age_seconds {
-                continue;
+                return Err(Error::InvalidOraclePrice);
             }
 
             fresh_count += 1;

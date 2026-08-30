@@ -204,9 +204,12 @@ fn test_stale_source_excluded_when_three_fresh_remain() {
     let client = OracleAggregatorClient::new(&env, &aggregator_id);
 
     // max_age_seconds = 60 → stale source (age 500 s) is excluded.
-    // Three fresh sources remain → median = 100.
+    // We now reject the entire aggregation if any source is stale.
     let sources = Vec::from_array(&env, [fresh_100, fresh_101, fresh_99, stale]);
-    assert_eq!(client.aggregate_price(&sources, &60), 100);
+    assert_eq!(
+        client.try_aggregate_price(&sources, &60),
+        Err(Ok(Error::InvalidOraclePrice))
+    );
 }
 
 #[test]
@@ -219,11 +222,11 @@ fn test_returns_oracle_staleness_when_too_few_fresh_sources() {
     let aggregator_id = env.register(OracleAggregator, ());
     let client = OracleAggregatorClient::new(&env, &aggregator_id);
 
-    // Only 1 fresh source; 2 stale → OracleStaleness (need >= 3 fresh).
+    // Stale sources now trigger InvalidOraclePrice.
     let sources = Vec::from_array(&env, [fresh_100, stale, stale2]);
     assert_eq!(
         client.try_aggregate_price(&sources, &60),
-        Err(Ok(Error::OracleStaleness))
+        Err(Ok(Error::InvalidOraclePrice))
     );
 }
 
@@ -241,7 +244,7 @@ fn test_all_stale_returns_oracle_staleness() {
     let sources = Vec::from_array(&env, [stale, stale2, stale3]);
     assert_eq!(
         client.try_aggregate_price(&sources, &60),
-        Err(Ok(Error::OracleStaleness))
+        Err(Ok(Error::InvalidOraclePrice))
     );
 }
 
@@ -287,11 +290,11 @@ fn test_one_second_over_threshold_is_stale() {
     let aggregator_id = env.register(OracleAggregator, ());
     let client = OracleAggregatorClient::new(&env, &aggregator_id);
 
-    // Only 2 fresh sources remain → OracleStaleness.
+    // Stale source now triggers InvalidOraclePrice.
     let sources = Vec::from_array(&env, [fresh_100, fresh_101, stale, stale2]);
     assert_eq!(
         client.try_aggregate_price(&sources, &499),
-        Err(Ok(Error::OracleStaleness))
+        Err(Ok(Error::InvalidOraclePrice))
     );
 }
 
